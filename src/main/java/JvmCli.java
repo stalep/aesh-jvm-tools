@@ -28,6 +28,7 @@ import org.aesh.command.parser.CommandLineParserException;
 import org.aesh.command.registry.CommandRegistry;
 import org.aesh.console.settings.Settings;
 import org.aesh.console.settings.SettingsBuilder;
+import org.aesh.jvm.commands.JStack;
 import org.aesh.jvm.commands.Jps;
 import org.aesh.readline.Prompt;
 import org.aesh.readline.ReadlineConsole;
@@ -44,6 +45,7 @@ public class JvmCli {
         CommandRegistry registry = new AeshCommandRegistryBuilder()
                 .command(Exit.class)
                 .command(Jps.class)
+                .command(JStack.class)
                 .create();
 
         Settings settings = SettingsBuilder.builder()

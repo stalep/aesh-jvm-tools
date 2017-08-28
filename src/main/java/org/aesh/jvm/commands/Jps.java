@@ -75,7 +75,6 @@ public class Jps implements Command {
                     else
                         commandInvocation.println(jvm.vmId()+" "+jvm.name());
                 }
-                
             }
             else if(list) {
                 Map<Integer, JVM> jvms = JVMProcesses.getAllVirtualMachines();
@@ -102,7 +101,10 @@ public class Jps implements Command {
                 }
             }
 
+            return CommandResult.SUCCESS;
         }
+        else
+            commandInvocation.println("Jps cannot list any running JVMs are you running with OpenJDK/OracleJDK and have tools.jar in your classpath?");
 
         return CommandResult.SUCCESS;
     }

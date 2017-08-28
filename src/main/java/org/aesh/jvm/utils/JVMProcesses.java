@@ -30,8 +30,10 @@ import sun.jvmstat.monitor.MonitoredVm;
 import sun.jvmstat.monitor.MonitoredVmUtil;
 import sun.jvmstat.monitor.VmIdentifier;
 import sun.management.ConnectorAddressLink;
+import sun.tools.attach.HotSpotVirtualMachine;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -74,37 +76,69 @@ public class JVMProcesses {
     }
 
     public static List<Integer> getMonitoredVMIds() {
+        if (!canAttachToLocalJVMs())
+            return new ArrayList<>();
         Set<Integer> vms;
         try {
-            vms = MonitoredHost.getMonitoredHost(new HostIdentifier((String)null)).activeVms();
-        }
-        catch (java.net.URISyntaxException | MonitorException x) {
+            vms = MonitoredHost.getMonitoredHost(new HostIdentifier((String) null)).activeVms();
+        } catch (java.net.URISyntaxException | MonitorException x) {
             throw new InternalError(x.getMessage(), x);
         }
         return new ArrayList<>(vms);
     }
 
-    public static List<String> getMonitoredVMNames() {
+    public static Map<Integer, String> getMonitoredVMIdsAndNames() {
+        if (!canAttachToLocalJVMs())
+            return new HashMap<>();
+
         MonitoredHost host;
         Set<Integer> vms;
-        List<String> names = new ArrayList<>();
         try {
-            host = MonitoredHost.getMonitoredHost(new HostIdentifier((String)null));
+            host = MonitoredHost.getMonitoredHost(new HostIdentifier((String) null));
             vms = host.activeVms();
-        }
-        catch (java.net.URISyntaxException | MonitorException x) {
+        } catch (java.net.URISyntaxException | MonitorException x) {
             throw new InternalError(x.getMessage(), x);
         }
-        for (Object vmid: vms) {
+        Map<Integer, String> jvms = new HashMap<>();
+        for (Object vmid : vms) {
             if (vmid instanceof Integer) {
                 String cmdLine = vmid.toString();
                 try {
                     MonitoredVm mvm = host.getMonitoredVm(new VmIdentifier(cmdLine));
                     // use the command line as the display name
-                    cmdLine =  MonitoredVmUtil.commandLine(mvm);
+                    cmdLine = MonitoredVmUtil.commandLine(mvm);
                     mvm.detach();
+                } catch (Exception x) {
+                    // ignore
                 }
-                catch (Exception x) {
+                jvms.put((Integer) vmid, parseCommandLine(cmdLine));
+            }
+        }
+        return jvms;
+    }
+
+    public static List<String> getMonitoredVMNames() {
+        if (!canAttachToLocalJVMs())
+            return new ArrayList<>();
+
+        MonitoredHost host;
+        Set<Integer> vms;
+        List<String> names = new ArrayList<>();
+        try {
+            host = MonitoredHost.getMonitoredHost(new HostIdentifier((String) null));
+            vms = host.activeVms();
+        } catch (java.net.URISyntaxException | MonitorException x) {
+            throw new InternalError(x.getMessage(), x);
+        }
+        for (Object vmid : vms) {
+            if (vmid instanceof Integer) {
+                String cmdLine = vmid.toString();
+                try {
+                    MonitoredVm mvm = host.getMonitoredVm(new VmIdentifier(cmdLine));
+                    // use the command line as the display name
+                    cmdLine = MonitoredVmUtil.commandLine(mvm);
+                    mvm.detach();
+                } catch (Exception x) {
                     // ignore
                 }
                 names.add(parseCommandLine(cmdLine));
@@ -117,12 +151,12 @@ public class JVMProcesses {
         MonitoredHost host;
         Set<Integer> vms;
         try {
-            host = MonitoredHost.getMonitoredHost(new HostIdentifier((String)null));
+            host = MonitoredHost.getMonitoredHost(new HostIdentifier((String) null));
             vms = host.activeVms();
         } catch (java.net.URISyntaxException | MonitorException x) {
             throw new InternalError(x.getMessage(), x);
         }
-        for (Object vmid: vms) {
+        for (Object vmid : vms) {
             if (vmid instanceof Integer) {
                 int pid = (Integer) vmid;
                 String cmdLine = vmid.toString();
@@ -133,14 +167,13 @@ public class JVMProcesses {
                 try {
                     MonitoredVm mvm = host.getMonitoredVm(new VmIdentifier(cmdLine));
                     // use the command line as the display name
-                    cmdLine =  MonitoredVmUtil.commandLine(mvm);
+                    cmdLine = MonitoredVmUtil.commandLine(mvm);
                     attachable = MonitoredVmUtil.isAttachable(mvm);
                     jvmArgs = MonitoredVmUtil.jvmArgs(mvm);
                     jvmFlags = MonitoredVmUtil.jvmFlags(mvm);
                     address = ConnectorAddressLink.importFrom(pid);
                     mvm.detach();
-                }
-                catch (Exception x) {
+                } catch (Exception x) {
                     // ignore
                 }
                 map.put((Integer) vmid,
@@ -150,14 +183,13 @@ public class JVMProcesses {
     }
 
     private static String parseCommandLine(String commandLine) {
-        if(commandLine.indexOf(' ') > 0) {
-           commandLine = commandLine.substring(0, commandLine.indexOf(' '));
+        if (commandLine.indexOf(' ') > 0) {
+            commandLine = commandLine.substring(0, commandLine.indexOf(' '));
         }
-        if(commandLine.indexOf('.') > 0) {
+        if (commandLine.indexOf('.') > 0) {
             if (commandLine.endsWith("jar")) {
-                commandLine = commandLine.substring(commandLine.lastIndexOf('/')+1);
-            }
-            else
+                commandLine = commandLine.substring(commandLine.lastIndexOf('/') + 1);
+            } else
                 commandLine = commandLine.substring(commandLine.lastIndexOf(".") + 1);
         }
 
@@ -191,5 +223,53 @@ public class JVMProcesses {
                 // do not support vmId different than pid
             }
         }
+    }
+
+    public static void dumpThread(String pid, String[] args) throws Exception {
+        VirtualMachine vm = null;
+        try {
+            vm = VirtualMachine.attach(pid);
+        } catch (Exception x) {
+            String msg = x.getMessage();
+            if (msg != null) {
+                System.err.println(pid + ": " + msg);
+            } else {
+                x.printStackTrace();
+            }
+            if ((x instanceof AttachNotSupportedException) &&
+                    (loadSAClass() != null)) {
+                System.err.println("The -F option can be used when the target " +
+                        "process is not responding");
+            }
+            System.exit(1);
+        }
+
+        // Cast to HotSpotVirtualMachine as this is implementation specific
+        // method.
+        InputStream in = ((HotSpotVirtualMachine) vm).remoteDataDump((Object[]) args);
+
+        // read to EOF and just print output
+        byte[] b = new byte[256];
+        int n;
+        do {
+            n = in.read(b);
+            if (n > 0) {
+                String s = new String(b, 0, n, "UTF-8");
+                System.out.print(s);
+            }
+        } while (n > 0);
+
+        in.close();
+        vm.detach();
+
+    }
+
+    private static Class<?> loadSAClass() {
+        try {
+            return Class.forName("sun.jvm.hotspot.tools.JStack", true,
+                    ClassLoader.getSystemClassLoader());
+        }
+        catch (Exception ignored)  { }
+        return null;
     }
 }

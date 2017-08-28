@@ -26,18 +26,23 @@ import java.io.File;
  */
 public class JVM {
 
+    private final String args;
+    private final String flags;
     private String name;
     private String address;
     private String commandLine;
     private int vmId;
     private boolean attachable;
 
-    public JVM(int vmId, String commandLine, boolean attachable, String address) {
+    public JVM(int vmId, String commandLine, String name, boolean attachable, String address,
+               String flags, String args) {
         this.commandLine = commandLine;
-        this.name = parseCommandLine(commandLine);
+        this.name = name;
         this.address = address;
         this.vmId = vmId;
         this.attachable = attachable;
+        this.flags = flags;
+        this.args = args;
     }
 
     public String name() {
@@ -60,25 +65,20 @@ public class JVM {
         return attachable;
     }
 
-    private String parseCommandLine(String commandLine) {
-        if(commandLine.indexOf(' ') > 0) {
-           commandLine = commandLine.substring(0, commandLine.indexOf(' '));
-        }
-        if(commandLine.indexOf('.') > 0) {
-            if (commandLine.endsWith("jar")) {
-                commandLine = commandLine.substring(commandLine.lastIndexOf('/')+1);
-            }
-            else
-                commandLine = commandLine.substring(commandLine.lastIndexOf(".") + 1);
-        }
+    public String args() {
+        return args;
+    }
 
-        return commandLine;
+    public String flags() {
+        return flags;
     }
 
     @Override
     public String toString() {
         return "JVM{" +
-                "name='" + name + '\'' +
+                "args='" + args + '\'' +
+                ", flags='" + flags + '\'' +
+                ", name='" + name + '\'' +
                 ", address='" + address + '\'' +
                 ", commandLine='" + commandLine + '\'' +
                 ", vmId=" + vmId +

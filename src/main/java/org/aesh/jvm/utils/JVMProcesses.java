@@ -32,6 +32,7 @@ import sun.jvmstat.monitor.VmIdentifier;
 import sun.management.ConnectorAddressLink;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -66,11 +67,50 @@ public class JVMProcesses {
     // This method returns the list of all virtual machines currently
     // running on the machine
     public static Map<Integer, JVM> getAllVirtualMachines() {
-        Map<Integer, JVM> map =
-                new HashMap<>();
+        Map<Integer, JVM> map = new HashMap<>();
         getMonitoredVMs(map);
         getAttachableVMs(map);
         return map;
+    }
+
+    public static List<Integer> getMonitoredVMIds() {
+        Set<Integer> vms;
+        try {
+            vms = MonitoredHost.getMonitoredHost(new HostIdentifier((String)null)).activeVms();
+        }
+        catch (java.net.URISyntaxException | MonitorException x) {
+            throw new InternalError(x.getMessage(), x);
+        }
+        return new ArrayList<>(vms);
+    }
+
+    public static List<String> getMonitoredVMNames() {
+        MonitoredHost host;
+        Set<Integer> vms;
+        List<String> names = new ArrayList<>();
+        try {
+            host = MonitoredHost.getMonitoredHost(new HostIdentifier((String)null));
+            vms = host.activeVms();
+        }
+        catch (java.net.URISyntaxException | MonitorException x) {
+            throw new InternalError(x.getMessage(), x);
+        }
+        for (Object vmid: vms) {
+            if (vmid instanceof Integer) {
+                String cmdLine = vmid.toString();
+                try {
+                    MonitoredVm mvm = host.getMonitoredVm(new VmIdentifier(cmdLine));
+                    // use the command line as the display name
+                    cmdLine =  MonitoredVmUtil.commandLine(mvm);
+                    mvm.detach();
+                }
+                catch (Exception x) {
+                    // ignore
+                }
+                names.add(parseCommandLine(cmdLine));
+            }
+        }
+        return names;
     }
 
     private static void getMonitoredVMs(Map<Integer, JVM> map) {
@@ -85,23 +125,43 @@ public class JVMProcesses {
         for (Object vmid: vms) {
             if (vmid instanceof Integer) {
                 int pid = (Integer) vmid;
-                String name = vmid.toString(); // default to pid if name not available
+                String cmdLine = vmid.toString();
                 boolean attachable = false;
                 String address = null;
+                String jvmArgs = null;
+                String jvmFlags = null;
                 try {
-                    MonitoredVm mvm = host.getMonitoredVm(new VmIdentifier(name));
+                    MonitoredVm mvm = host.getMonitoredVm(new VmIdentifier(cmdLine));
                     // use the command line as the display name
-                    name =  MonitoredVmUtil.commandLine(mvm);
+                    cmdLine =  MonitoredVmUtil.commandLine(mvm);
                     attachable = MonitoredVmUtil.isAttachable(mvm);
+                    jvmArgs = MonitoredVmUtil.jvmArgs(mvm);
+                    jvmFlags = MonitoredVmUtil.jvmFlags(mvm);
                     address = ConnectorAddressLink.importFrom(pid);
                     mvm.detach();
-                } catch (Exception x) {
+                }
+                catch (Exception x) {
                     // ignore
                 }
                 map.put((Integer) vmid,
-                        new JVM(pid, name, attachable, address));
+                        new JVM(pid, cmdLine, parseCommandLine(cmdLine), attachable, address, jvmArgs, jvmFlags));
             }
         }
+    }
+
+    private static String parseCommandLine(String commandLine) {
+        if(commandLine.indexOf(' ') > 0) {
+           commandLine = commandLine.substring(0, commandLine.indexOf(' '));
+        }
+        if(commandLine.indexOf('.') > 0) {
+            if (commandLine.endsWith("jar")) {
+                commandLine = commandLine.substring(commandLine.lastIndexOf('/')+1);
+            }
+            else
+                commandLine = commandLine.substring(commandLine.lastIndexOf(".") + 1);
+        }
+
+        return commandLine;
     }
 
     private static final String LOCAL_CONNECTOR_ADDRESS_PROP =
@@ -117,6 +177,7 @@ public class JVMProcesses {
                     String address = null;
                     try {
                         VirtualMachine vm = VirtualMachine.attach(vmd);
+                        Properties prop = vm.getAgentProperties();
                         attachable = true;
                         Properties agentProps = vm.getAgentProperties();
                         address = (String) agentProps.get(LOCAL_CONNECTOR_ADDRESS_PROP);
@@ -124,7 +185,7 @@ public class JVMProcesses {
                     } catch (AttachNotSupportedException | IOException x) {
                         // not attachable
                     }
-                    map.put(vmId, new JVM(vmId, vmd.displayName(), attachable, address));
+                    map.put(vmId, new JVM(vmId, vmd.displayName(), vmd.displayName(), attachable, address, null, null));
                 }
             } catch (NumberFormatException e) {
                 // do not support vmId different than pid

@@ -65,7 +65,7 @@
          </properties>
       </profile>
       <profile>
-         <id>mac-profile</id>
+         <id>posix-profile</id>
          <activation>
             <activeByDefault>true</activeByDefault>
             <file>

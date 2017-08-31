@@ -32,6 +32,7 @@ import sun.jvmstat.monitor.VmIdentifier;
 import sun.management.ConnectorAddressLink;
 import sun.tools.attach.HotSpotVirtualMachine;
 
+import javax.tools.Tool;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
@@ -233,15 +234,10 @@ public class JVMProcesses {
             String msg = x.getMessage();
             if (msg != null) {
                 System.err.println(pid + ": " + msg);
-            } else {
+            }
+            else {
                 x.printStackTrace();
             }
-            if ((x instanceof AttachNotSupportedException) &&
-                    (loadSAClass() != null)) {
-                System.err.println("The -F option can be used when the target " +
-                        "process is not responding");
-            }
-            System.exit(1);
         }
 
         // Cast to HotSpotVirtualMachine as this is implementation specific
@@ -264,12 +260,5 @@ public class JVMProcesses {
 
     }
 
-    private static Class<?> loadSAClass() {
-        try {
-            return Class.forName("sun.jvm.hotspot.tools.JStack", true,
-                    ClassLoader.getSystemClassLoader());
-        }
-        catch (Exception ignored)  { }
-        return null;
-    }
+
 }

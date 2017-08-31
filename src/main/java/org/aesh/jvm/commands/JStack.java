@@ -25,8 +25,11 @@ import org.aesh.command.CommandException;
 import org.aesh.command.CommandResult;
 import org.aesh.command.invocation.CommandInvocation;
 import org.aesh.command.option.Argument;
+import org.aesh.command.option.Option;
 import org.aesh.jvm.completer.JavaPidNameCompleter;
 import org.aesh.jvm.utils.JVMProcesses;
+
+import java.util.ArrayList;
 
 /**
  * @author <a href="mailto:stale.pedersen@jboss.org">Ståle W. Pedersen</a>
@@ -34,6 +37,14 @@ import org.aesh.jvm.utils.JVMProcesses;
 @CommandDefinition(name = "jstack", description = "Prints Java thread stack traces for a Java process or core file.")
 public class JStack implements Command {
 
+    @Option(name = "force", shortName = 'F', hasValue = false)
+    private boolean force;
+
+    @Option(name = "list", shortName = 'l', hasValue = false)
+    private boolean list;
+
+    @Option(name = "mixed", shortName = 'm', hasValue = false)
+    private boolean mixed;
 
     @Argument(required = true, completer = JavaPidNameCompleter.class)
     private String pid;
@@ -43,8 +54,9 @@ public class JStack implements Command {
         if(JVMProcesses.canAttachToLocalJVMs()) {
 
             try {
-                JVMProcesses.dumpThread(pid, new String[0]);
-            } catch (Exception e) {
+                JVMProcesses.dumpThread(pid, args());
+            }
+            catch (Exception e) {
                 e.printStackTrace();
             }
 
@@ -57,4 +69,19 @@ public class JStack implements Command {
             return CommandResult.FAILURE;
         }
     }
+
+
+
+    private String[] args() {
+        ArrayList<String> options = new ArrayList<>();
+        if (list)
+            options.add("-l");
+        if (mixed)
+            options.add("-m");
+        if (force)
+            options.add("-F");
+
+        return options.toArray(new String[options.size()]);
+    }
+
 }
